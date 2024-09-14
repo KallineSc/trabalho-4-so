@@ -1,15 +1,6 @@
 import uuid
 from datetime import datetime
 
-# Variável global para geração de IDs sequenciais
-proximo_id = 0
-
-def gerar_id():
-    global proximo_id
-    id_atual = proximo_id
-    proximo_id += 1
-    return id_atual
-
 class Disco:
     def __init__(self, num_blocos=100, tamanho_bloco=10):
         self.tamanho_bloco = tamanho_bloco
@@ -64,27 +55,22 @@ class Inode:
     def __repr__(self):
         return f"Inode({self.id_inode}, tipo={self.tipo}, blocos={self.blocos})"
 
-class EntradaDiretorio:
-    def __init__(self, nome, inode):
-        self.nome = nome
-        self.inode = inode
-
 class Diretorio:
     def __init__(self):
         self.entradas = {}
 
     def adicionar_entrada(self, nome, inode):
-        self.entradas[nome] = EntradaDiretorio(nome, inode)
+        self.entradas[nome] = inode
 
     def remover_entrada(self, nome):
         if nome in self.entradas:
             del self.entradas[nome]
 
     def obter_inode(self, nome):
-        return self.entradas.get(nome).inode if nome in self.entradas else None
+        return self.entradas.get(nome)
 
     def listar_entradas(self):
-        return [(nome, entrada.inode.id_inode) for nome, entrada in self.entradas.items()]
+        return [(nome, inode) for nome, inode in self.entradas.items()]
 
 class SistemaArquivos:
     def __init__(self):
@@ -100,9 +86,6 @@ class SistemaArquivos:
         self.raiz.adicionar_entrada('..', self.inode_raiz)
         self.diretorio_atual = self.raiz
 
-        print(f"Blocos de dados: {self.disco.blocos_dados}")
-        print(f"Blocos de Inodes: {self.disco.blocos_inodes}")
-
     def criar_inode(self, tipo_inode):
         inode = Inode(tipo_inode)
         inode.id_inode = self.disco.alocar_bloco_inode(inode)
@@ -110,7 +93,7 @@ class SistemaArquivos:
 
     def criar_arquivo(self, nome, dados=""):
         inode = self.criar_inode('arquivo')
-        # Divide o dado em blocos e aloca-os no disco
+
         for i in range(0, len(dados), self.disco.tamanho_bloco):
             bloco_dados = dados[i:i + self.disco.tamanho_bloco]
             indice_bloco = self.disco.alocar_bloco_dados(bloco_dados)
@@ -118,8 +101,6 @@ class SistemaArquivos:
 
         self.diretorio_atual.adicionar_entrada(nome, inode)
         print(f"Arquivo '{nome}' criado com inode {inode.id_inode} e {len(inode.blocos)} blocos de dados")
-        print(f"Blocos de dados: {self.disco.blocos_dados}")
-        print(f"Blocos de Inodes: {self.disco.blocos_inodes}")
 
     def criar_diretorio(self, nome):
         inode_diretorio = self.criar_inode('diretorio')
@@ -132,22 +113,20 @@ class SistemaArquivos:
         inode_diretorio.blocos.append(indice_bloco)
 
         print(f"Diretório '{nome}' criado com inode {inode_diretorio.id_inode}")
-        print(f"Blocos de dados: {self.disco.blocos_dados}")
-        print(f"Blocos de Inodes: {self.disco.blocos_inodes}")
 
     def mudar_diretorio(self, nome):
         inode = self.diretorio_atual.obter_inode(nome)
         if inode and inode.tipo == 'diretorio':
             self.diretorio_atual = self.disco.obter_bloco_dados(inode.blocos[0])
-            print(f"Entrou no diretório '{nome}' {inode}")
+            print(f"Entrou no diretório '{nome}'")
         else:
             print(f"Diretório '{nome}' não encontrado")
 
     def listar_diretorio(self):
         entradas = self.diretorio_atual.listar_entradas()
         print("Conteúdo do diretório:")
-        for nome, id_inode in entradas:
-            print(f"{nome} -> inode {id_inode}")
+        for nome, inode in entradas:
+            print(f"{nome} -> inode {inode.id_inode}")
 
     def exibir_conteudo_arquivo(self, nome):
         inode = self.diretorio_atual.obter_inode(nome)
@@ -174,8 +153,6 @@ class SistemaArquivos:
             inode.atualizado_em = datetime.now()
 
             print(f"Arquivo '{nome}' atualizado com {len(inode.blocos)} blocos de dados.")
-            print(f"Blocos de dados: {self.disco.blocos_dados}")
-            print(f"Blocos de Inodes: {self.disco.blocos_inodes}")
         else:
             print(f"Arquivo '{nome}' não encontrado ou não é um arquivo válido.")
 
@@ -197,22 +174,17 @@ class SistemaArquivos:
         diretorio_destino = self.disco.obter_bloco_dados(inode_destino.blocos[0])
         diretorio_destino.adicionar_entrada(nome_arquivo, inode_arquivo)
         print(f"Arquivo '{nome_arquivo}' movido para o diretório '{nome_diretorio_destino}'.")
-        
-        print(f"Blocos de dados: {self.disco.blocos_dados}")
-        print(f"Blocos de Inodes: {self.disco.blocos_inodes}")
 
     def excluir_diretorio(self, nome):
         inode = self.diretorio_atual.obter_inode(nome)
         if inode and inode.tipo == 'diretorio':
             diretorio = self.disco.obter_bloco_dados(inode.blocos[0])
 
-            for nome_entrada, entrada in list(diretorio.entradas.items()):
-                print(f"nome_entrada: {nome_entrada} entrada: {entrada}")
+            for nome_entrada, inode_entrada in list(diretorio.entradas.items()):
                 if nome_entrada in ['.', '..']:
                     continue
                 
                 self.mudar_diretorio(nome)
-                inode_entrada = entrada.inode
                 if inode_entrada.tipo == 'arquivo':
                     self.excluir_arquivo(nome_entrada)
                 elif inode_entrada.tipo == 'diretorio':
@@ -229,15 +201,12 @@ class SistemaArquivos:
             self.diretorio_atual.remover_entrada(nome)
 
             print(f"Diretório '{nome}' excluído com sucesso.")
-            print(f"Blocos de dados: {self.disco.blocos_dados}")
-            print(f"Blocos de Inodes: {self.disco.blocos_inodes}")
         else:
             print(f"Diretório '{nome}' não encontrado ou não é um diretório.")
 
     def excluir_arquivo(self, nome):
         inode = self.diretorio_atual.obter_inode(nome)
         self.listar_diretorio()
-        print(f"Inode: {self.diretorio_atual}")
         if inode and inode.tipo == 'arquivo':
             for indice_bloco in inode.blocos:
                 self.disco.desalocar_bloco_dados(indice_bloco)
@@ -249,34 +218,46 @@ class SistemaArquivos:
             self.diretorio_atual.remover_entrada(nome)
 
             print(f"Arquivo '{nome}' excluído com sucesso.")
-            print(f"Blocos de dados: {self.disco.blocos_dados}")
-            print(f"Blocos de Inodes: {self.disco.blocos_inodes}")
         else:
             print(f"Arquivo '{nome}' não encontrado ou não é um arquivo.")
 
+
 sistema = SistemaArquivos()
+print(f"-------CRIAR ARQUIVOS E DIRETÓRIOS----------")
 sistema.criar_arquivo("arquivo1.txt", "Conteúdo do arquivo 1")
-sistema.listar_diretorio()
+sistema.criar_arquivo("arquivo2.txt", "Conteúdo do arquivo 2")
 sistema.criar_diretorio("documentos")
 sistema.listar_diretorio()
+
 sistema.mudar_diretorio("documentos")
 sistema.criar_arquivo("arquivo3.txt", "Arquivo 3 dentro de documentos")
 sistema.listar_diretorio()
+
+# print(f"Blocos de dados: {sistema.disco.blocos_dados}")
+# print(f"Blocos de Inodes: {sistema.disco.blocos_inodes}")
+
+print(f"-------EXIBIR CONTEÚDO DE ARQUIVOS----------")
 sistema.exibir_conteudo_arquivo("arquivo3.txt")
+
+print(f"-------MOVER ARQUIVO----------")
 sistema.mudar_diretorio("..")
 sistema.listar_diretorio() 
 sistema.mover_arquivo("arquivo1.txt", "documentos")
+sistema.listar_diretorio()
 sistema.mudar_diretorio("documentos")
 sistema.listar_diretorio()
-sistema.mudar_diretorio("..")
-sistema.listar_diretorio()
-print(f"-------Vamos escrever num arquivo----------")
-sistema.mudar_diretorio("documentos")
-sistema.listar_diretorio() 
+
+print(f"-------ESCREVER NO ARQUIVO----------")
 sistema.exibir_conteudo_arquivo("arquivo3.txt")
-sistema.escrever_arquivo("arquivo3.txt", "Novo texto para o arquivo 3")
+sistema.escrever_arquivo("arquivo3.txt", "Novo texto para o arquivo 3. Novo texto")
 sistema.exibir_conteudo_arquivo("arquivo3.txt")
+
 print(f"-------DELETAR DIRETÓRIO----------")
 sistema.mudar_diretorio("..")
 sistema.excluir_diretorio("documentos")
+sistema.listar_diretorio()
+
+print(f"-------DELETAR ARQUIVO----------")
+sistema.mudar_diretorio("..")
+sistema.excluir_arquivo("arquivo2.txt")
 sistema.listar_diretorio()
